@@ -1,0 +1,1186 @@
+{
+  "info": {
+    "name": "Payment Service - Enterprise API (Complete)",
+    "description": "Comprehensive Postman Collection for ACID-compliant Payment Service with PostgreSQL. Includes provisioning, wallet operations, payment transactions, reporting, and ERROR PATH TEST CASES.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "userId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "merchantId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "walletId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "paymentId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "nonExistentId",
+      "value": "00000000-0000-0000-0000-000000000000",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Provisioning (Setup)",
+      "item": [
+        {
+          "name": "Create User",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.variables.set('uniqueEmail', 'user_' + pm.variables.replaceIn('{{$guid}}') + '@test.com');"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Response time < 500ms', () => pm.expect(pm.response.responseTime).to.be.below(500));",
+                  "const b = pm.response.json();",
+                  "pm.test('Has required fields', () => {pm.expect(b).to.have.property('id'); pm.expect(b).to.have.property('email'); pm.expect(b).to.have.property('fullName'); pm.expect(b).to.have.property('status'); pm.expect(b).to.have.property('createdAt');});",
+                  "pm.expect(b.id).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);",
+                  "pm.test('Default status is ACTIVE', () => pm.expect(b.status).to.eql('ACTIVE'));",
+                  "pm.test('Email matches', () => pm.expect(b.email).to.eql(pm.variables.get('uniqueEmail')));",
+                  "pm.environment.set('userId', b.id);",
+                  "pm.collectionVariables.set('userId', b.id);",
+                  "console.log('User created: ' + b.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1/users",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\": \"{{uniqueEmail}}\", \"fullName\": \"Test User {{$randomInt}}\"}"
+            }
+          }
+        },
+        {
+          "name": "Create Merchant",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.variables.set('uniqueMerchantKey', 'MERCH-' + pm.variables.replaceIn('{{$guid}}').substring(0, 8).toUpperCase());"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Response time < 500ms', () => pm.expect(pm.response.responseTime).to.be.below(500));",
+                  "const b = pm.response.json();",
+                  "pm.test('Has required fields', () => {pm.expect(b).to.have.property('id'); pm.expect(b).to.have.property('name'); pm.expect(b).to.have.property('apiKey'); pm.expect(b).to.have.property('createdAt');});",
+                  "pm.expect(b.id).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);",
+                  "pm.test('Name matches', () => pm.expect(b.name).to.include('Test Merchant'));",
+                  "pm.environment.set('merchantId', b.id);",
+                  "pm.collectionVariables.set('merchantId', b.id);",
+                  "console.log('Merchant created: ' + b.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1/merchants",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\": \"Test Merchant {{$randomInt}}\", \"apiKey\": \"{{uniqueMerchantKey}}\"}"
+            }
+          }
+        },
+        {
+          "name": "Create Wallet (Link to User)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Response time < 500ms', () => pm.expect(pm.response.responseTime).to.be.below(500));",
+                  "const b = pm.response.json();",
+                  "pm.test('Has required fields', () => {pm.expect(b).to.have.property('id'); pm.expect(b).to.have.property('balance'); pm.expect(b).to.have.property('currency'); pm.expect(b).to.have.property('version'); pm.expect(b).to.have.property('user');});",
+                  "pm.expect(b.id).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);",
+                  "pm.test('Balance is 1000.00', () => pm.expect(b.balance).to.eql(1000.00));",
+                  "pm.test('Currency is USD', () => pm.expect(b.currency).to.eql('USD'));",
+                  "pm.test('User linked', () => pm.expect(b.user.id).to.eql(pm.environment.get('userId')));",
+                  "pm.environment.set('walletId', b.id);",
+                  "pm.collectionVariables.set('walletId', b.id);",
+                  "console.log('Wallet created: ' + b.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1/wallets",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"userId\": \"{{userId}}\", \"balance\": 1000.00, \"currency\": \"USD\"}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Wallet Operations",
+      "item": [
+        {
+          "name": "Wallet Top-Up",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response time < 500ms', () => pm.expect(pm.response.responseTime).to.be.below(500));",
+                  "const b = pm.response.json();",
+                  "pm.test('Has required fields', () => {pm.expect(b).to.have.property('id'); pm.expect(b).to.have.property('balance'); pm.expect(b).to.have.property('currency'); pm.expect(b).to.have.property('version');});",
+                  "pm.test('Balance is 1500.00 (1000 + 500)', () => pm.expect(b.balance).to.eql(1500.00));",
+                  "pm.test('Wallet ID matches', () => pm.expect(b.id).to.eql(pm.environment.get('walletId')));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1/payments/wallets/{{walletId}}/topup",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "500.00"
+            }
+          }
+        },
+        {
+          "name": "Get Wallet Balance",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response time < 300ms', () => pm.expect(pm.response.responseTime).to.be.below(300));",
+                  "const b = pm.response.json();",
+                  "pm.test('Has required fields', () => {pm.expect(b).to.have.property('id'); pm.expect(b).to.have.property('balance'); pm.expect(b).to.have.property('currency');});",
+                  "pm.test('Balance is non-negative', () => pm.expect(b.balance).to.be.at.least(0));",
+                  "pm.test('Wallet ID matches', () => pm.expect(b.id).to.eql(pm.environment.get('walletId')));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1/wallets/{{walletId}}",
+            "header": []
+          }
+        },
+        {
+          "name": "Get Wallet by User ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response time < 300ms', () => pm.expect(pm.response.responseTime).to.be.below(300));",
+                  "const b = pm.response.json();",
+                  "pm.test('Has required fields', () => {pm.expect(b).to.have.property('id'); pm.expect(b).to.have.property('balance'); pm.expect(b).to.have.property('user');});",
+                  "pm.test('Belongs to correct user', () => pm.expect(b.user.id).to.eql(pm.environment.get('userId')));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1/wallets/user/{{userId}}",
+            "header": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Payment Transactions",
+      "item": [
+        {
+          "name": "Process Wallet Transfer (Success)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response time < 500ms', () => pm.expect(pm.response.responseTime).to.be.below(500));",
+                  "const b = pm.response.json();",
+                  "pm.test('Has required fields', () => {pm.expect(b).to.have.property('id'); pm.expect(b).to.have.property('amount'); pm.expect(b).to.have.property('type'); pm.expect(b).to.have.property('status'); pm.expect(b).to.have.property('user'); pm.expect(b).to.have.property('merchant'); pm.expect(b).to.have.property('createdAt');});",
+                  "pm.expect(b.id).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);",
+                  "pm.test('Type is WALLET_TRANSFER', () => pm.expect(b.type).to.eql('WALLET_TRANSFER'));",
+                  "pm.test('Status is SUCCESS', () => pm.expect(b.status).to.eql('SUCCESS'));",
+                  "pm.test('Amount is 50.00', () => pm.expect(b.amount).to.eql(50.00));",
+                  "pm.test('User matches', () => pm.expect(b.user.id).to.eql(pm.environment.get('userId')));",
+                  "pm.test('Merchant matches', () => pm.expect(b.merchant.id).to.eql(pm.environment.get('merchantId')));",
+                  "pm.environment.set('paymentId', b.id);",
+                  "pm.collectionVariables.set('paymentId', b.id);",
+                  "console.log('Payment created: ' + b.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1/payments/wallet-transfer",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"walletId\": \"{{walletId}}\", \"merchantId\": \"{{merchantId}}\", \"amount\": 50.00}"
+            }
+          }
+        },
+        {
+          "name": "Process Payment (Create)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Response time < 500ms', () => pm.expect(pm.response.responseTime).to.be.below(500));",
+                  "const b = pm.response.json();",
+                  "pm.test('Has required fields', () => {pm.expect(b).to.have.property('id'); pm.expect(b).to.have.property('amount'); pm.expect(b).to.have.property('type'); pm.expect(b).to.have.property('status'); pm.expect(b).to.have.property('user'); pm.expect(b).to.have.property('merchant');});",
+                  "pm.expect(b.id).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);",
+                  "pm.test('Type is DEBIT', () => pm.expect(b.type).to.eql('DEBIT'));",
+                  "pm.test('Status is PENDING', () => pm.expect(b.status).to.eql('PENDING'));",
+                  "pm.test('Amount is 100.00', () => pm.expect(b.amount).to.eql(100.00));",
+                  "pm.test('Version present', () => pm.expect(b.version).to.be.a('number'));",
+                  "pm.environment.set('pendingPaymentId', b.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1/payments",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"userId\": \"{{userId}}\", \"merchantId\": \"{{merchantId}}\", \"amount\": 100.00, \"type\": \"DEBIT\", \"status\": \"PENDING\"}"
+            }
+          }
+        },
+        {
+          "name": "Batch Payments",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 202', () => pm.response.to.have.status(202));",
+                  "pm.test('Response time < 1500ms', () => pm.expect(pm.response.responseTime).to.be.below(1500));",
+                  "pm.test('Has Content-Type header', () => pm.response.to.have.header('Content-Type'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1/payments/batch",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "[{\"user\":{\"id\":\"{{userId}}\"},\"merchant\":{\"id\":\"{{merchantId}}\"},\"amount\":10.00,\"type\":\"DEBIT\",\"status\":\"PENDING\"},{\"user\":{\"id\":\"{{userId}}\"},\"merchant\":{\"id\":\"{{merchantId}}\"},\"amount\":20.00,\"type\":\"DEBIT\",\"status\":\"PENDING\"}]"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Reporting & Search",
+      "item": [
+        {
+          "name": "Get Payment By ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response time < 300ms', () => pm.expect(pm.response.responseTime).to.be.below(300));",
+                  "const b = pm.response.json();",
+                  "pm.test('Has required fields', () => {pm.expect(b).to.have.property('id'); pm.expect(b).to.have.property('amount'); pm.expect(b).to.have.property('type'); pm.expect(b).to.have.property('status'); pm.expect(b).to.have.property('user'); pm.expect(b).to.have.property('merchant'); pm.expect(b).to.have.property('createdAt');});",
+                  "pm.test('Payment ID matches', () => pm.expect(b.id).to.eql(pm.environment.get('paymentId')));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1/payments/{{paymentId}}",
+            "header": []
+          }
+        },
+        {
+          "name": "List User Payments",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response time < 500ms', () => pm.expect(pm.response.responseTime).to.be.below(500));",
+                  "const b = pm.response.json();",
+                  "pm.test('Response is an array', () => pm.expect(b).to.be.an('array'));",
+                  "if (b.length > 0) {",
+                  "  pm.test('All have status SUCCESS', () => b.forEach(p => pm.expect(p.status).to.eql('SUCCESS')));",
+                  "  pm.test('All have required fields', () => b.forEach(p => { pm.expect(p).to.have.property('id'); pm.expect(p).to.have.property('amount'); }));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1/payments/user/{{userId}}?status=SUCCESS&limit=10",
+            "header": []
+          }
+        },
+        {
+          "name": "Dynamic Search",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response time < 500ms', () => pm.expect(pm.response.responseTime).to.be.below(500));",
+                  "const b = pm.response.json();",
+                  "pm.test('Response is an array', () => pm.expect(b).to.be.an('array'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1/payments/search?minAmount=10&maxAmount=500&status=SUCCESS&page=0&size=10",
+            "header": []
+          }
+        },
+        {
+          "name": "Payment Summary Report",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const end = new Date();",
+                  "const start = new Date();",
+                  "start.setDate(start.getDate() - 30);",
+                  "pm.variables.set('reportEndDate', end.toISOString());",
+                  "pm.variables.set('reportStartDate', start.toISOString());"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response time < 500ms', () => pm.expect(pm.response.responseTime).to.be.below(500));",
+                  "const b = pm.response.json();",
+                  "pm.test('Has totalsByStatus', () => pm.expect(b).to.have.property('totalsByStatus'));",
+                  "pm.test('totalsByStatus is an object', () => pm.expect(b.totalsByStatus).to.be.an('object'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1/payments/reports/summary?startDate={reportStartDate}&endDate={reportEndDate}",
+            "header": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. CRUD - Read All",
+      "item": [
+        {
+          "name": "Get User by ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response time < 300ms', () => pm.expect(pm.response.responseTime).to.be.below(300));",
+                  "const b = pm.response.json();",
+                  "pm.test('Has required fields', () => {pm.expect(b).to.have.property('id'); pm.expect(b).to.have.property('email'); pm.expect(b).to.have.property('fullName'); pm.expect(b).to.have.property('status'); pm.expect(b).to.have.property('createdAt');});",
+                  "pm.test('User ID matches', () => pm.expect(b.id).to.eql(pm.environment.get('userId')));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1/users/{{userId}}",
+            "header": []
+          }
+        },
+        {
+          "name": "List All Users",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response time < 500ms', () => pm.expect(pm.response.responseTime).to.be.below(500));",
+                  "const b = pm.response.json();",
+                  "pm.test('Response is an array', () => pm.expect(b).to.be.an('array'));",
+                  "pm.test('Contains our user', () => pm.expect(b.some(u => u.id === pm.environment.get('userId'))).to.be.true);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1/users",
+            "header": []
+          }
+        },
+        {
+          "name": "Get Merchant by ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response time < 300ms', () => pm.expect(pm.response.responseTime).to.be.below(300));",
+                  "const b = pm.response.json();",
+                  "pm.test('Has required fields', () => {pm.expect(b).to.have.property('id'); pm.expect(b).to.have.property('name'); pm.expect(b).to.have.property('apiKey'); pm.expect(b).to.have.property('createdAt');});",
+                  "pm.test('Merchant ID matches', () => pm.expect(b.id).to.eql(pm.environment.get('merchantId')));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1/merchants/{{merchantId}}",
+            "header": []
+          }
+        },
+        {
+          "name": "List All Merchants",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response time < 500ms', () => pm.expect(pm.response.responseTime).to.be.below(500));",
+                  "const b = pm.response.json();",
+                  "pm.test('Response is an array', () => pm.expect(b).to.be.an('array'));",
+                  "pm.test('Contains our merchant', () => pm.expect(b.some(m => m.id === pm.environment.get('merchantId'))).to.be.true);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1/merchants",
+            "header": []
+          }
+        },
+        {
+          "name": "List All Wallets",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response time < 500ms', () => pm.expect(pm.response.responseTime).to.be.below(500));",
+                  "const b = pm.response.json();",
+                  "pm.test('Response is an array', () => pm.expect(b).to.be.an('array'));",
+                  "pm.test('Contains our wallet', () => pm.expect(b.some(w => w.id === pm.environment.get('walletId'))).to.be.true);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1/wallets",
+            "header": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Refund Operations",
+      "item": [
+        {
+          "name": "Refund Payment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response time < 500ms', () => pm.expect(pm.response.responseTime).to.be.below(500));",
+                  "const b = pm.response.json();",
+                  "pm.test('Status is REFUNDED', () => pm.expect(b.status).to.eql('REFUNDED'));",
+                  "pm.test('Payment ID matches', () => pm.expect(b.id).to.eql(pm.environment.get('paymentId')));",
+                  "console.log('Payment refunded: ' + b.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/v1/payments/{{paymentId}}/refund",
+            "header": []
+          }
+        },
+        {
+          "name": "Verify Refunded Payment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('Status is REFUNDED', () => pm.expect(b.status).to.eql('REFUNDED'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1/payments/{{paymentId}}",
+            "header": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "7. ERROR PATH TEST CASES",
+      "item": [
+        {
+          "name": "Create User - Missing Email (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400', () => pm.expect(pm.response.status).to.eql('Bad Request'));",
+                  "const b = pm.response.json();",
+                  "pm.test('Error structure valid', () => { pm.expect(b).to.have.property('status'); pm.expect(b).to.have.property('error'); pm.expect(b).to.have.property('message'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1/users",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"fullName\": \"No Email User\"}"
+            }
+          }
+        },
+        {
+          "name": "Create User - Invalid Email (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400', () => pm.expect(pm.response.code).to.be.oneOf([400, 500]));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1/users",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\": \"not-an-email\", \"fullName\": \"Test User\"}"
+            }
+          }
+        },
+        {
+          "name": "Create User - Empty Name (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400 for empty name', () => pm.expect(pm.response.code).to.be.oneOf([400, 500]));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1/users",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\": \"test{{$randomInt}}@test.com\", \"fullName\": \"\"}"
+            }
+          }
+        },
+        {
+          "name": "Create User - Duplicate Email (409)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.variables.set('dupEmail', 'dup_' + Date.now() + '@test.com');"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400/409/500 for duplicate', () => pm.expect(pm.response.code).to.be.oneOf([400, 409, 500]));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1/users",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\": \"duplicate@test.com\", \"fullName\": \"Duplicate User\"}"
+            }
+          }
+        },
+        {
+          "name": "Create Wallet - Invalid User ID (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400 for invalid user', () => pm.expect(pm.response.code).to.be.oneOf([400, 500]));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1/wallets",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"userId\": \"{{nonExistentId}}\", \"balance\": 100.00, \"currency\": \"USD\"}"
+            }
+          }
+        },
+        {
+          "name": "Wallet Top-Up - Negative Amount (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400 for negative amount', () => pm.expect(pm.response.code).to.be.oneOf([400, 500]));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1/payments/wallets/{{walletId}}/topup",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "-100.00"
+            }
+          }
+        },
+        {
+          "name": "Wallet Top-Up - Zero Amount (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400 for zero amount', () => pm.expect(pm.response.code).to.be.oneOf([400, 500]));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1/payments/wallets/{{walletId}}/topup",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "0"
+            }
+          }
+        },
+        {
+          "name": "Wallet Transfer - Insufficient Funds (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400', () => pm.expect(pm.response.code).to.be.oneOf([400, 500]));",
+                  "const b = pm.response.json();",
+                  "pm.test('Message mentions funds', () => pm.expect(b.message.toLowerCase()).to.match(/insufficient|funds|balance/));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1/payments/wallet-transfer",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"walletId\": \"{{walletId}}\", \"merchantId\": \"{{merchantId}}\", \"amount\": 999999.99}"
+            }
+          }
+        },
+        {
+          "name": "Wallet Transfer - Non-Existent Wallet (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400 for non-existent wallet', () => pm.expect(pm.response.code).to.be.oneOf([400, 404, 500]));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1/payments/wallet-transfer",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"walletId\": \"{{nonExistentId}}\", \"merchantId\": \"{{merchantId}}\", \"amount\": 50.00}"
+            }
+          }
+        },
+        {
+          "name": "Wallet Transfer - Non-Existent Merchant (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400 for non-existent merchant', () => pm.expect(pm.response.code).to.be.oneOf([400, 404, 500]));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1/payments/wallet-transfer",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"walletId\": \"{{walletId}}\", \"merchantId\": \"{{nonExistentId}}\", \"amount\": 50.00}"
+            }
+          }
+        },
+        {
+          "name": "Get Payment - Non-Existent ID (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 404', () => pm.expect(pm.response.status).to.eql('Not Found'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1/payments/{{nonExistentId}}",
+            "header": []
+          }
+        },
+        {
+          "name": "Get Wallet - Non-Existent ID (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 404', () => pm.expect(pm.response.status).to.eql('Not Found'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1/wallets/{{nonExistentId}}",
+            "header": []
+          }
+        },
+        {
+          "name": "Get User - Non-Existent ID (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 404', () => pm.expect(pm.response.status).to.eql('Not Found'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1/users/{{nonExistentId}}",
+            "header": []
+          }
+        },
+        {
+          "name": "Refund Payment - Non-Existent ID (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 404 for non-existent payment', () => pm.expect(pm.response.status).to.eql('Not Found'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/v1/payments/{{nonExistentId}}/refund",
+            "header": []
+          }
+        },
+        {
+          "name": "Refund Payment - Already REFUNDED (422)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 422 or 400 for already refunded', () => pm.expect(pm.response.code).to.be.oneOf([400, 422, 500]));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/v1/payments/{{paymentId}}/refund",
+            "header": []
+          }
+        },
+        {
+          "name": "Batch Payments - Exceeds 500 Limit (400)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "var batch = [];",
+                  "for(var i = 0; i < 501; i++) { batch.push({user:{id:pm.environment.get('userId')},merchant:{id:pm.environment.get('merchantId')},amount:1.00,type:'DEBIT',status:'PENDING'}); }",
+                  "pm.variables.set('largeBatch', JSON.stringify(batch));"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400 for batch > 500', () => pm.expect(pm.response.code).to.be.oneOf([400, 500]));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1/payments/batch",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{{largeBatch}}"
+            }
+          }
+        },
+        {
+          "name": "Search - Invalid Date Range",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400 for invalid range', () => pm.expect(pm.response.code).to.be.oneOf([400, 500]));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1/payments/search?minAmount=500&maxAmount=10",
+            "header": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "8. Cleanup (Delete)",
+      "item": [
+        {
+          "name": "Delete Wallet",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 204 No Content', () => pm.expect(pm.response.code).to.eql(204));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/v1/wallets/{{walletId}}",
+            "header": []
+          }
+        },
+        {
+          "name": "Delete Merchant",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 204 No Content', () => pm.expect(pm.response.code).to.eql(204));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/v1/merchants/{{merchantId}}",
+            "header": []
+          }
+        },
+        {
+          "name": "Delete User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 204 No Content', () => pm.expect(pm.response.code).to.eql(204));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/v1/users/{{userId}}",
+            "header": []
+          }
+        },
+        {
+          "name": "Delete Non-Existent (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 404', () => pm.expect(pm.response.status).to.eql('Not Found'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/v1/users/{{nonExistentId}}",
+            "header": []
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,78 @@
+type Payment {
+  id: ID!
+  userId: ID!
+  merchantId: ID!
+  walletId: ID
+  amount: Float!
+  type: String!
+  status: String!
+  createdAt: String!
+  version: Int
+}
+
+type User {
+  id: ID!
+  email: String!
+  fullName: String!
+  status: String!
+  createdAt: String!
+}
+
+type Wallet {
+  id: ID!
+  userId: ID!
+  balance: Float!
+  currency: String!
+  version: Int
+}
+
+type Merchant {
+  id: ID!
+  name: String!
+  apiKey: String!
+  createdAt: String!
+}
+
+type PaymentSummary {
+  totalsByStatus: [StatusTotal!]!
+}
+
+type StatusTotal {
+  status: String!
+  total: Float!
+}
+
+type Query {
+  payment(id: ID!): Payment
+  payments(userId: ID!, status: String, limit: Int): [Payment!]!
+  searchPayments(minAmount: Float, maxAmount: Float, currency: String, status: String, page: Int, size: Int): [Payment!]!
+  paymentSummary(startDate: String!, endDate: String!): PaymentSummary!
+  user(id: ID!): User
+  users: [User!]!
+  wallet(id: ID!): Wallet
+  wallets: [Wallet!]!
+  walletByUserId(userId: ID!): Wallet
+  merchant(id: ID!): Merchant
+  merchants: [Merchant!]!
+}
+
+type Mutation {
+  processPayment(input: ProcessPaymentInput!): Payment!
+  walletTransfer(walletId: ID!, merchantId: ID!, amount: Float!): Payment!
+  topUpWallet(walletId: ID!, amount: Float!): Wallet!
+  processBatchPayments(payments: [ProcessPaymentInput!]!): Boolean!
+  refundPayment(id: ID!): Payment!
+  createUser(email: String!, fullName: String!, status: String): User!
+  deleteUser(id: ID!): Boolean!
+  createWallet(userId: ID!, balance: Float!, currency: String!): Wallet!
+  createMerchant(name: String!, apiKey: String!): Merchant!
+  deleteMerchant(id: ID!): Boolean!
+}
+
+input ProcessPaymentInput {
+  userId: ID!
+  merchantId: ID!
+  amount: Float!
+  type: String
+  status: String
+}

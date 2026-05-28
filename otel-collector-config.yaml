@@ -1,0 +1,64 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: 'payment-service'
+          scrape_interval: 10s
+          metrics_path: '/actuator/prometheus'
+          static_configs:
+            - targets: ['host.docker.internal:8083']
+              labels:
+                app: payment-service
+                backend: java-graphql
+            - targets: ['host.docker.internal:8081']
+              labels:
+                app: payment-service
+                backend: java-graphql
+            - targets: ['host.docker.internal:8082']
+              labels:
+                app: payment-service
+                backend: java-graphql
+            - targets: ['host.docker.internal:8084']
+              labels:
+                app: payment-service
+                backend: java-graphql
+
+processors:
+  batch:
+    timeout: 10s
+    send_batch_size: 1000
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+
+exporters:
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+
+  prometheusremotewrite/mimir:
+    endpoint: http://mimir:9009/api/v1/push
+    tls:
+      insecure: true
+
+  debug:
+    verbosity: basic
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch, memory_limiter]
+      exporters: [otlp/tempo, debug]
+    metrics:
+      receivers: [prometheus]
+      processors: [batch, memory_limiter]
+      exporters: [prometheusremotewrite/mimir, debug]

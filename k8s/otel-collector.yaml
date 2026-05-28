@@ -1,0 +1,126 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-conf
+  namespace: payments
+data:
+  otel-collector-config.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+    processors:
+      batch:
+        timeout: 10s
+        send_batch_size: 1000
+      memory_limiter:
+        check_interval: 1s
+        limit_mib: 512
+    exporters:
+      otlphttp/mimir:
+        endpoint: http://mimir:9009/otlp
+        tls:
+          insecure: true
+      otlp/tempo:
+        endpoint: tempo:4317
+        tls:
+          insecure: true
+      loki:
+        endpoint: http://loki:3100/loki/api/v1/push
+        tls:
+          insecure: true
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [otlp/tempo]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlphttp/mimir]
+        logs:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [loki]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-collector
+  namespace: payments
+  labels:
+    app: otel-collector
+    version: v1.0.0
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: otel-collector
+  template:
+    metadata:
+      labels:
+        app: otel-collector
+        version: v1.0.0
+    spec:
+      containers:
+      - name: otel-collector
+        image: otel/opentelemetry-collector-contrib:0.91.0
+        args:
+        - --config=/etc/otel/otel-config.yaml
+        - --service Pipelines
+        volumeMounts:
+        - name: otel-config
+          mountPath: /etc/otel
+        ports:
+        - containerPort: 4317
+          name: otlp-grpc
+        - containerPort: 4318
+          name: otlp-http
+        - containerPort: 8889
+          name: metrics
+        # ============================================================
+        # RESOURCE LIMITS FOR OTel Collector
+        # ============================================================
+        resources:
+          requests:
+            cpu: "250m"
+            memory: "512Mi"
+          limits:
+            cpu: "1000m"
+            memory: "1Gi"
+        env:
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: "http://tempo:4317"
+      volumes:
+      - name: otel-config
+        configMap:
+          name: otel-collector-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector
+  namespace: payments
+  labels:
+    app: otel-collector
+spec:
+  selector:
+    app: otel-collector
+  ports:
+  - name: otlp-grpc
+    port: 4317
+    targetPort: 4317
+    protocol: TCP
+  - name: otlp-http
+    port: 4318
+    targetPort: 4318
+    protocol: TCP
+  - name: metrics
+    port: 8889
+    targetPort: 8889
+    protocol: TCP
+  type: ClusterIP

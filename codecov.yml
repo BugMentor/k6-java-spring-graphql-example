@@ -1,0 +1,31 @@
+codecov:
+  require_ci_until: 2025-12-31
+
+coverage:
+  precision: 2
+  round: down
+  range: "70...100"
+  status:
+    project:
+      default:
+        target: 80%
+        threshold: 1%
+    patch:
+      default:
+        target: 80%
+
+comment:
+  layout: "reach, diff, flags, files"
+  behavior: default
+  require_changes: false
+
+flags:
+  unit:
+    paths:
+      - src/test/java/com/enterprise/payment/domain/**
+      - src/test/java/com/enterprise/payment/application/**
+    carryforward: true
+  integration:
+    paths:
+      - src/test/java/com/enterprise/payment/infrastructure/**
+    carryforward: true

@@ -1,0 +1,23 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:55432/payment_db
+    username: payment_user
+    password: payment_pass
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: false
+  flyway:
+    enabled: false
+  liquibase:
+    enabled: false
+
+logging:
+  level:
+    root: WARN
+    com.enterprise.payment: INFO

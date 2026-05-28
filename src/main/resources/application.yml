@@ -1,0 +1,33 @@
+spring:
+  threads:
+    virtual:
+      enabled: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    export:
+      prometheus:
+        enabled: true
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+      slo:
+        http.server.requests: 10ms, 50ms, 100ms, 200ms, 500ms, 1s, 2s, 5s
+
+logging:
+  level:
+    root: INFO
+    com.enterprise.payment: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - [trace_id=%X{trace_id} span_id=%X{span_id}] - %msg%n"

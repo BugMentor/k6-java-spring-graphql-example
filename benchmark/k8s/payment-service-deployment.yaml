@@ -1,0 +1,116 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-service
+  namespace: payments
+  labels:
+    app: payment-service
+    version: v1.0.0
+    backend: java-graphql
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: payment-service
+  template:
+    metadata:
+      labels:
+        app: payment-service
+        version: v1.0.0
+    backend: java-graphql
+    spec:
+      containers:
+      - name: payment-service
+        image: payment-service:1.0.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        - containerPort: 9010
+          name: otlp
+          protocol: TCP
+        resources:
+          requests:
+            cpu: "1000m"
+            memory: "1Gi"
+          limits:
+            cpu: "1000m"
+            memory: "1Gi"
+        env:
+        - name: SPRING_PROFILES_ACTIVE
+          value: "production"
+        - name: JAVA_TOOL_OPTIONS
+          value: "-XX:InitialRAMPercentage=25.0 -XX:MaxRAMPercentage=50.0 -XX:+UseZGC -XX:+UseStringDeduplication -XX:+AlwaysPreTouch"
+        - name: DB_URL
+          value: "jdbc:postgresql://postgres-service:5432/payments"
+        - name: DB_USERNAME
+          value: "payments"
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: payment-service-secrets
+              key: db-password
+        - name: SERVER_TOMCAT_THREADS_MAX
+          value: "200"
+        - name: SERVER_TOMCAT_ACCEPT_COUNT
+          value: "100"
+        - name: SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE
+          value: "50"
+        - name: SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE
+          value: "10"
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: "http://otel-collector:4317"
+        - name: OTEL_SERVICE_NAME
+          value: "payment-service"
+        livenessProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /actuator/health/readiness
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 30
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: payment-service
+  namespace: payments
+  labels:
+    app: payment-service
+    backend: java-graphql
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    app: payment-service
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: payment-service-secrets
+  namespace: payments
+type: Opaque
+data:
+  db-password: cGFzc3dvcmQxMjM=

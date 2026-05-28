@@ -1,0 +1,77 @@
+version: 2
+updates:
+  - package-ecosystem: "maven"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "security"
+    reviewers:
+      - "security-team"
+    groups:
+      maven-major:
+        patterns:
+          - "*"
+        update-types:
+          - "major"
+        dependency-type: "production"
+      maven-minor:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+        dependency-type: "production"
+      test-dependencies:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+        dependency-type: "development"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    commit-message:
+      prefix: "ci"
+    labels:
+      - "ci"
+      - "dependencies"
+
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    commit-message:
+      prefix: "docker"
+    labels:
+      - "docker"
+      - "dependencies"
+
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    commit-message:
+      prefix: "py"
+    ignore:
+      - dependency-name: "pytest"
+        update-types: ["patch"]
+      - dependency-name: "black"
+        update-types: ["patch"]

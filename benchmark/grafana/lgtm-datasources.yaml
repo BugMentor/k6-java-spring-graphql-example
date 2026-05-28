@@ -1,0 +1,35 @@
+apiVersion: 1
+
+datasources:
+  - name: Mimir
+    type: prometheus
+    access: proxy
+    url: http://lgtm-mimir:9009/prometheus
+    isDefault: true
+    editable: true
+    jsonData:
+      timeInterval: 5s
+      httpMethod: POST
+      queryTimeout: 30s
+
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    editable: true
+
+  - name: Tempo
+    type: tempo
+    access: proxy
+    url: http://tempo:3200
+    editable: true
+    jsonData:
+      tracesToLogsV2:
+        datasourceUid: loki
+        spanStartTimeShift: "-1h"
+        spanEndTimeShift: "1h"
+        tags:
+          - key: service.name
+            value: resource.service.name
+          - key: trace_id
+            value: traceID

@@ -1,0 +1,71 @@
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: otel-collector
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - mimir
+      - loki
+      - tempo
+
+  mimir:
+    image: grafana/mimir:latest
+    container_name: lgtm-mimir
+    command: ["-config.file=/etc/mimir.yaml"]
+    ports:
+      - "9009:9009"
+    volumes:
+      - ./benchmark/lgtm/mimir.yaml:/etc/mimir.yaml:ro
+      - ./.data/mimir:/data
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:latest
+    container_name: lgtm-loki
+    ports:
+      - "3100:3100"
+    command: "-config.file=/etc/loki/local-config.yaml"
+    restart: unless-stopped
+
+  tempo:
+    image: grafana/tempo:latest
+    container_name: lgtm-tempo
+    command: ["-config.file=/etc/tempo.yaml"]
+    ports:
+      - "3200:3200"
+    volumes:
+      - ./tempo.yaml:/etc/tempo.yaml:ro
+      - tempo_data:/var/tempo
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: lgtm-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_INSTALL_PLUGINS: ""
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./benchmark/grafana/lgtm-datasources.yaml:/etc/grafana/provisioning/datasources/lgtm.yaml:ro
+      - ./benchmark/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    restart: unless-stopped
+    depends_on:
+      - mimir
+      - loki
+      - tempo
+
+volumes:
+  tempo_data:
+  grafana_data:
