@@ -9,7 +9,7 @@
   <img src="https://img.shields.io/badge/Grafana-LGTM-F46800?style=for-the-badge&logo=grafana&logoColor=white" alt="Grafana LGTM">
 </p>
 
-ACID-compliant payment platform with full LGTM observability (Loki, Grafana, Tempo, Mimir). Built with Clean Architecture, TDD, and OpenTelemetry instrumentation. Auto-scales on Kubernetes via HPA.
+Java 21 + Spring Boot 3.2 ACID-compliant payment platform with REST and GraphQL endpoints. Full LGTM observability (Loki, Grafana, Tempo, Mimir), Clean Architecture, TDD, and OpenTelemetry instrumentation. Auto-scales on Kubernetes via HPA.
 
 ---
 
