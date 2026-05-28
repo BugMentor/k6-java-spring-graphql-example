@@ -34,11 +34,43 @@ ACID-compliant payment platform with full LGTM observability (Loki, Grafana, Tem
 **HPA (Horizontal Pod Autoscaler)** is a Kubernetes controller that automatically scales the number of pod replicas based on observed CPU and memory utilization.
 
 ```mermaid
-graph TD
+graph LR
     HPA["HPA<br/>minReplicas: 2<br/>maxReplicas: 30"]
-    HPA -->|monitors| Metrics
     Metrics["CPU > 80% / RAM > 60%<br/>CPU < 40% / RAM < 30%"]
-    Metrics -->|triggers| Pods["Pods: 2 → 4 → 8 → ... → 30"]
+
+    HPA -->|monitors| Metrics
+    Metrics -->|triggers| Stage2
+
+    subgraph Stage2["2 pods (minimum)"]
+        P1["pod"]
+        P2["pod"]
+    end
+    subgraph Stage4["4 pods"]
+        P3["pod"]
+        P4["pod"]
+        P5["pod"]
+        P6["pod"]
+    end
+    subgraph Stage8["8 pods"]
+        P7["pod"]
+        P8["pod"]
+        P9["pod"]
+        P10["pod"]
+        P11["pod"]
+        P12["pod"]
+        P13["pod"]
+        P14["pod"]
+    end
+    subgraph StageMax["... up to 30 pods"]
+        P15["pod"]
+        P16["pod"]
+        P17["pod"]
+        P18["pod"]
+    end
+
+    Stage2 -->|scale up| Stage4
+    Stage4 -->|scale up| Stage8
+    Stage8 -->|scale up| StageMax
 ```
 
 ### Constitutional HPA Rules (Unviolable)
