@@ -41,6 +41,7 @@ graph TD
     Metrics -->|triggers| S2
 
     subgraph S2["2 pods (min)"]
+        direction LR
         P1["pod"]
         P2["pod"]
     end
@@ -48,6 +49,7 @@ graph TD
     S2 -->|scale up| S4
 
     subgraph S4["4 pods"]
+        direction LR
         Q1["pod"]
         Q2["pod"]
         Q3["pod"]
@@ -57,6 +59,7 @@ graph TD
     S4 -->|scale up| S8
 
     subgraph S8["8 pods"]
+        direction LR
         R1["pod"]
         R2["pod"]
         R3["pod"]
