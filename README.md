@@ -33,22 +33,12 @@ ACID-compliant payment platform with full LGTM observability (Loki, Grafana, Tem
 
 **HPA (Horizontal Pod Autoscaler)** is a Kubernetes controller that automatically scales the number of pod replicas based on observed CPU and memory utilization.
 
-```
-                    ┌──────────────────────┐
-                    │         HPA           │
-                    │  minReplicas: 2       │
-                    │  maxReplicas: 30      │
-                    └──────────┬───────────┘
-                               │ monitors
-                    ┌──────────┴───────────┐
-                    │   CPU > 80% / RAM > 60%    │
-                    │   CPU < 40% / RAM < 30%    │
-                    └──────────────────────────┘
-                               │
-                               ▼
-              ┌────────────────────────────────┐
-              │  Pods: 2 ──► 4 ──► 8 ──► ... ──► 30   │
-              └────────────────────────────────┘
+```mermaid
+graph TD
+    HPA["HPA<br/>minReplicas: 2<br/>maxReplicas: 30"]
+    HPA -->|monitors| Metrics
+    Metrics["CPU > 80% / RAM > 60%<br/>CPU < 40% / RAM < 30%"]
+    Metrics -->|triggers| Pods["Pods: 2 → 4 → 8 → ... → 30"]
 ```
 
 ### Constitutional HPA Rules (Unviolable)
@@ -102,11 +92,15 @@ Stabilization window: 300 seconds (5 minutes) before first scale-down (prevents 
 
 **Example scale-up sequence under heavy load:**
 
-```
-2 pods  ──(15s, +100%)──►  4 pods  ──(15s, +100%)──►  8 pods
-8 pods  ──(15s, +100%)──►  16 pods ──(15s, +4)──────►  20 pods
-20 pods ──(15s, +4)─────►  24 pods ──(15s, +4)──────►  28 pods
-28 pods ──(15s, +4)─────►  30 pods (hard limit)
+```mermaid
+graph LR
+    A["2 pods"] -->|"15s, +100%"| B["4 pods"]
+    B -->|"15s, +100%"| C["8 pods"]
+    C -->|"15s, +100%"| D["16 pods"]
+    D -->|"15s, +4"| E["20 pods"]
+    E -->|"15s, +4"| F["24 pods"]
+    F -->|"15s, +4"| G["28 pods"]
+    G -->|"15s, +4"| H["30 pods (hard limit)"]
 ```
 
 ### What is OOM?
@@ -117,20 +111,28 @@ Stabilization window: 300 seconds (5 minutes) before first scale-down (prevents 
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                 PRESENTATION LAYER                       │
-│  REST Controllers (/v1/)  │  GraphQL API (/graphql)     │
-├─────────────────────────────────────────────────────────┤
-│                 APPLICATION LAYER                        │
-│  9 Use Cases (all @WithSpan)  │  PaymentRepositoryPort  │
-├─────────────────────────────────────────────────────────┤
-│                   DOMAIN LAYER                           │
-│  User │ Merchant │ Wallet │ Payment │ PaymentSummary    │
-├─────────────────────────────────────────────────────────┤
-│               INFRASTRUCTURE LAYER                       │
-│  JPA Repositories │ HikariCP │ OTel Collector │ Mimir   │
-└─────────────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    subgraph Presentation["PRESENTATION LAYER"]
+        REST["REST Controllers (/v1/)"]
+        GQL["GraphQL API (/graphql)"]
+    end
+    subgraph Application["APPLICATION LAYER"]
+        UC["9 Use Cases (@WithSpan)"]
+        Port["PaymentRepositoryPort"]
+    end
+    subgraph Domain["DOMAIN LAYER"]
+        Ent["User / Merchant / Wallet<br/>Payment / PaymentSummary"]
+    end
+    subgraph Infrastructure["INFRASTRUCTURE LAYER"]
+        JPA["JPA Repositories"]
+        HikariCP["HikariCP"]
+        OTel["OTel Collector"]
+        Mimir["Mimir"]
+    end
+    Presentation -->|depends on| Application
+    Application -->|depends on| Domain
+    Infrastructure -.->|implements| Application
 ```
 
 - **Domain** — Zero framework annotations. Pure Java entities and business rules.
@@ -142,12 +144,22 @@ Stabilization window: 300 seconds (5 minutes) before first scale-down (prevents 
 
 ## Observability (LGTM Stack)
 
-```
-  Payment Service ──► OTel Collector ──► Mimir  (metrics storage, PromQL)
-                       │              ├─► Loki   (log aggregation, LogQL)
-                       │              └─► Tempo  (distributed tracing)
-                       ▼
-                    Grafana ── Unified dashboard (CPU, RAM, OOM, latency, errors)
+```mermaid
+graph LR
+    PS["Payment Service"]
+    OTel["OTel Collector"]
+    Mimir["Mimir (metrics, PromQL)"]
+    Loki["Loki (logs, LogQL)"]
+    Tempo["Tempo (traces)"]
+    Grafana["Grafana<br/>Unified Dashboard<br/>CPU, RAM, OOM, latency, errors"]
+
+    PS --> OTel
+    OTel --> Mimir
+    OTel --> Loki
+    OTel --> Tempo
+    Mimir --> Grafana
+    Loki --> Grafana
+    Tempo --> Grafana
 ```
 
 No standalone Prometheus — Mimir is the metrics backend (PromQL-compatible). All three signals (metrics, logs, traces) flow through the OpenTelemetry Collector as a single ingestion pipeline.
@@ -309,28 +321,26 @@ Deployed on **KinD (Kubernetes in Docker)** cluster `payment-fight` (3 nodes: 1 
 
 ### Cluster Topology
 
-```
-┌──────────────────────────────────────────────────────────┐
-│  payments namespace                                       │
-│                                                           │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐       │
-│  │ payment-svc │  │ payment-svc │  │   postgres  │       │
-│  │  (pod 1)    │  │  (pod 2)    │  │   (pod)     │       │
-│  │  1Gi/1CPU  │  │  1Gi/1CPU  │  │   4Gi/2CPU  │       │
-│  └─────────────┘  └─────────────┘  └─────────────┘       │
-│         ▲               ▲              ▲                 │
-│         └───────┬───────┘              │                 │
-│                 │                      │                 │
-│  ┌──────────────┴──────────────────────┴─────────┐       │
-│  │              HPA (2 min, 30 max)               │       │
-│  │       HPA: UP CPU>80%/RAM>60% | DOWN CPU<40%/RAM<30%       │       │
-│  └───────────────────────────────────────────────┘       │
-│                                                           │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐   │
-│  │  prometheus  │  │ otel-collector│  │   mimir      │   │
-│  │  (scraper)   │  │ (pipeline)   │  │ (metrics)    │   │
-│  └──────────────┘  └──────────────┘  └──────────────┘   │
-└──────────────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    subgraph payments["payments namespace"]
+        subgraph appPods["Payment Service Pods"]
+            Pod1["payment-svc (pod 1)<br/>1Gi/1CPU"]
+            Pod2["payment-svc (pod 2)<br/>1Gi/1CPU"]
+        end
+        PG["postgres (pod)<br/>4Gi/2CPU"]
+        HPA["HPA<br/>2 min, 30 max<br/>UP: CPU>80% / RAM>60%<br/>DOWN: CPU<40% / RAM<30%"]
+        Prom["prometheus (scraper)"]
+        OTelCol["otel-collector (pipeline)"]
+        MimirS["mimir (metrics)"]
+
+        HPA -.->|manages| Pod1
+        HPA -.->|manages| Pod2
+        Pod1 --> PG
+        Pod2 --> PG
+        Prom --> MimirS
+        OTelCol --> MimirS
+    end
 ```
 
 ### Deployment Manifests
