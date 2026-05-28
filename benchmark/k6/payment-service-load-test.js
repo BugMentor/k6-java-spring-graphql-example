@@ -1,19 +1,3 @@
-// ==========================================================================
-// LOAD TEST — BASELINE BENCHMARKING
-// ==========================================================================
-// General-purpose configurable load test against all payment-service
-// endpoints (REST + GraphQL). Uses realistic traffic distribution:
-//   35% wallet transfers, 20% payment creation, 15% GraphQL processing,
-//   10% top-ups, 10% search, 10% get payments.
-//
-// HPA (Horizontal Pod Autoscaler) monitors CPU (80%) and memory (60%)
-// thresholds. Under light load (<200 VUs), HPA should maintain 2 pods
-// (constitutional minimum). Scaling triggers as VUs increase.
-//
-// Default: 50 VUs, 5min. Override with TARGET_VUS and TEST_DURATION.
-// Run: k6 run -e BASE_URL=http://localhost:30080 -e TARGET_VUS=200 -e TEST_DURATION=10m benchmark/k6/payment-service-load-test.js
-// ==========================================================================
-import http from 'k6/http';
 import { check, sleep, group } from 'k6';
 import { Rate, Trend, Counter } from 'k6/metrics';
 import {
@@ -31,16 +15,21 @@ const searchLatency = new Trend('search_latency', true);
 const concurrentConnections = new Counter('concurrent_vus');
 
 const BASE_URL = __ENV.BASE_URL || 'http://payment-service.payments.svc.cluster.local';
-const GRAPHQL_URL = __ENV.GRAPHQL_URL || `${BASE_URL}/graphql`;
+const GRAPHQL_URL = `${BASE_URL}/graphql`;
 const TARGET_VUS = parseInt(__ENV.TARGET_VUS) || 50;
 const TEST_DURATION = __ENV.TEST_DURATION || '5m';
 
-let userId = null;
-let merchantId = null;
-let walletId = null;
+const WALLET_TRANSFER_MUTATION = `
+mutation($walletId: String!, $merchantId: String!, $amount: Float!) {
+  walletTransfer(walletId: $walletId, merchantId: $merchantId, amount: $amount) {
+    id
+    status
+    amount
+  }
+}`;
 
-const GRAPHQL_PROCESS_PAYMENT_QUERY = `
-mutation ProcessPayment($input: ProcessPaymentInput!) {
+const PROCESS_PAYMENT_MUTATION = `
+mutation($input: ProcessPaymentInput!) {
   processPayment(input: $input) {
     id
     amount
@@ -50,9 +39,27 @@ mutation ProcessPayment($input: ProcessPaymentInput!) {
   }
 }`;
 
-const GRAPHQL_SEARCH_QUERY = `
-query SearchPayments($minAmount: Float, $maxAmount: Float, $status: String, $page: Int, $size: Int) {
+const TOP_UP_MUTATION = `
+mutation($walletId: String!, $amount: Float!) {
+  topUpWallet(walletId: $walletId, amount: $amount) {
+    id
+    balance
+  }
+}`;
+
+const SEARCH_QUERY = `
+query($minAmount: Float, $maxAmount: Float, $status: String, $page: Int, $size: Int) {
   searchPayments(minAmount: $minAmount, maxAmount: $maxAmount, status: $status, page: $page, size: $size) {
+    id
+    amount
+    status
+    createdAt
+  }
+}`;
+
+const USER_PAYMENTS_QUERY = `
+query($userId: String!, $status: String, $limit: Int) {
+  payments(userId: $userId, status: $status, limit: $limit) {
     id
     amount
     status
@@ -85,41 +92,42 @@ export function setup() {
 }
 
 export default function (data) {
-  userId = data.userId;
-  merchantId = data.merchantId;
-  walletId = data.walletId;
-  const vuId = __VU;
-  const iterId = __ITER;
+  const walletId = data.walletId;
+  const merchantId = data.merchantId;
+  const userId = data.userId;
 
   const scenario = Math.random();
 
   if (scenario < 0.35) {
-    restWalletTransfer();
+    graphqlWalletTransfer(walletId, merchantId);
   } else if (scenario < 0.55) {
-    restCreatePayment();
+    graphqlCreatePayment(userId, merchantId);
   } else if (scenario < 0.70) {
-    graphqlProcessPayment();
+    graphqlProcessPayment(userId, merchantId);
   } else if (scenario < 0.80) {
-    restTopUp();
+    graphqlTopUp(walletId);
   } else if (scenario < 0.90) {
-    restSearch();
+    graphqlSearch();
   } else {
-    restGetPayment();
+    graphqlGetUserPayments(userId);
   }
 }
 
-function restWalletTransfer() {
+function graphqlWalletTransfer(walletId, merchantId) {
   const amount = (Math.random() * 190 + 10).toFixed(2);
   const payload = JSON.stringify({
-    walletId: walletId,
-    merchantId: merchantId,
-    amount: parseFloat(amount)
+    query: WALLET_TRANSFER_MUTATION,
+    variables: {
+      walletId,
+      merchantId,
+      amount: parseFloat(amount),
+    },
   });
 
   const start = Date.now();
-  const res = http.post(`${BASE_URL}/v1/payments/wallet-transfer`, payload, {
+  const res = http.post(GRAPHQL_URL, payload, {
     headers: { 'Content-Type': 'application/json' },
-    tags: { name: 'wallet_transfer' }
+    tags: { name: 'wallet_transfer' },
   });
 
   walletTransferLatency.add(Date.now() - start);
@@ -127,100 +135,127 @@ function restWalletTransfer() {
   concurrentConnections.add(1, { vus: __VU });
 
   check(res, {
-    'wallet transfer status 200': r => r.status === 200,
+    'wallet transfer graphql ok': r => r.status === 200,
   });
 }
 
-function restCreatePayment() {
+function graphqlCreatePayment(userId, merchantId) {
   const amount = (Math.random() * 100 + 1).toFixed(2);
   const payload = JSON.stringify({
-    userId: userId,
-    merchantId: merchantId,
-    amount: parseFloat(amount),
-    type: 'DEBIT'
-  });
-
-  const start = Date.now();
-  const res = http.post(`${BASE_URL}/v1/payments`, payload, {
-    headers: { 'Content-Type': 'application/json' },
-    tags: { name: 'create_payment' }
-  });
-
-  paymentCreateLatency.add(Date.now() - start);
-  errorRate.add(res.status !== 201);
-
-  check(res, {
-    'create payment status 201': r => r.status === 201,
-  });
-}
-
-function graphqlProcessPayment() {
-  const amount = Math.random() * 50 + 1;
-  const payload = JSON.stringify({
-    query: GRAPHQL_PROCESS_PAYMENT_QUERY,
+    query: PROCESS_PAYMENT_MUTATION,
     variables: {
       input: {
-        userId: userId,
-        merchantId: merchantId,
-        amount: parseFloat(amount.toFixed(2)),
-        type: 'DEBIT'
-      }
-    }
+        userId,
+        merchantId,
+        amount: parseFloat(amount),
+        type: 'DEBIT',
+      },
+    },
   });
 
   const start = Date.now();
   const res = http.post(GRAPHQL_URL, payload, {
     headers: { 'Content-Type': 'application/json' },
-    tags: { name: 'graphql_process_payment' }
+    tags: { name: 'create_payment' },
+  });
+
+  paymentCreateLatency.add(Date.now() - start);
+  errorRate.add(res.status !== 200);
+
+  check(res, {
+    'create payment graphql ok': r => r.status === 200,
+  });
+}
+
+function graphqlProcessPayment(userId, merchantId) {
+  const amount = Math.random() * 50 + 1;
+  const payload = JSON.stringify({
+    query: PROCESS_PAYMENT_MUTATION,
+    variables: {
+      input: {
+        userId,
+        merchantId,
+        amount: parseFloat(amount.toFixed(2)),
+        type: 'DEBIT',
+      },
+    },
+  });
+
+  const start = Date.now();
+  const res = http.post(GRAPHQL_URL, payload, {
+    headers: { 'Content-Type': 'application/json' },
+    tags: { name: 'graphql_process_payment' },
   });
 
   graphqlProcessPaymentLatency.add(Date.now() - start);
   errorRate.add(res.status !== 200);
 
   check(res, {
-    'graphql payment status 200': r => r.status === 200,
+    'graphql payment graphql ok': r => r.status === 200,
   });
 }
 
-function restTopUp() {
+function graphqlTopUp(walletId) {
   const amount = (Math.random() * 500 + 100).toFixed(2);
+  const payload = JSON.stringify({
+    query: TOP_UP_MUTATION,
+    variables: {
+      walletId,
+      amount: parseFloat(amount),
+    },
+  });
 
   const start = Date.now();
-  const res = http.post(`${BASE_URL}/v1/payments/wallets/${walletId}/topup`, amount, {
+  const res = http.post(GRAPHQL_URL, payload, {
     headers: { 'Content-Type': 'application/json' },
-    tags: { name: 'top_up' }
+    tags: { name: 'top_up' },
   });
 
   topUpLatency.add(Date.now() - start);
   errorRate.add(res.status !== 200);
 
   check(res, {
-    'top up status 200': r => r.status === 200,
+    'top up graphql ok': r => r.status === 200,
   });
 }
 
-function restSearch() {
+function graphqlSearch() {
+  const payload = JSON.stringify({
+    query: SEARCH_QUERY,
+    variables: { minAmount: 1, maxAmount: 500, status: 'SUCCESS', page: 0, size: 10 },
+  });
+
   const start = Date.now();
-  const res = http.get(`${BASE_URL}/v1/payments/search?minAmount=1&maxAmount=500&status=SUCCESS&page=0&size=10`, {
-    tags: { name: 'search_payments' }
+  const res = http.post(GRAPHQL_URL, payload, {
+    headers: { 'Content-Type': 'application/json' },
+    tags: { name: 'search_payments' },
   });
 
   searchLatency.add(Date.now() - start);
   errorRate.add(res.status !== 200);
 
   check(res, {
-    'search status 200': r => r.status === 200,
+    'search graphql ok': r => r.status === 200,
   });
 }
 
-function restGetPayment() {
-  const res = http.get(`${BASE_URL}/v1/payments/user/${userId}?status=SUCCESS&limit=10`, {
-    tags: { name: 'get_user_payments' }
+function graphqlGetUserPayments(userId) {
+  const payload = JSON.stringify({
+    query: USER_PAYMENTS_QUERY,
+    variables: { userId, status: 'SUCCESS', limit: 10 },
   });
 
+  const start = Date.now();
+  const res = http.post(GRAPHQL_URL, payload, {
+    headers: { 'Content-Type': 'application/json' },
+    tags: { name: 'get_user_payments' },
+  });
+
+  searchLatency.add(Date.now() - start);
   errorRate.add(res.status !== 200);
+
   check(res, {
-    'get payments status 200': r => r.status === 200,
+    'get payments graphql ok': r => r.status === 200,
   });
 }
 
@@ -238,7 +273,7 @@ export function handleSummary(data) {
 function textSummary(data) {
   return `
 ============================================================
-  K6 LOAD TEST RESULTS - Payment Service
+  K6 LOAD TEST RESULTS - Payment Service (GraphQL Only)
 ============================================================
 Target VUs: ${TARGET_VUS}
 Duration: ${TEST_DURATION}
