@@ -1,0 +1,9 @@
+[submodule "k6-go-gin-graphql-example"]
+	path = k6-go-gin-graphql-example
+	url = https://github.com/BugMentor/k6-go-gin-graphql-example
+[submodule "k6-java-spring-graphql-example"]
+	path = k6-java-spring-graphql-example
+	url = https://github.com/BugMentor/k6-java-spring-graphql-example
+[submodule "k6-java-spring-soap-example"]
+	path = k6-java-spring-soap-example
+	url = https://github.com/BugMentor/k6-java-spring-soap-example

@@ -1,0 +1,12 @@
+{
+  "name": "k6-fight-club-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "k6-go-gin-graphql-example",
+    "k6-java-spring-graphql-example", 
+    "k6-java-spring-soap-example"
+  ],
+  "author": "Matias Magni <matias.magni@gmail.com>",
+  "license": "MIT"
+}
