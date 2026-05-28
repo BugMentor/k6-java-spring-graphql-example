@@ -38,46 +38,11 @@ graph TD
     HPA["HPA<br/>minReplicas: 2<br/>maxReplicas: 30"]
     Metrics["CPU > 80% / RAM > 60%<br/>CPU < 40% / RAM < 30%"]
     HPA -->|monitors| Metrics
+    Metrics -->|triggers| S2
 
-    Metrics -->|triggers| Scale
-
-    subgraph Scale["Horizontal Pod Scaling"]
-        direction LR
-
-        subgraph S2["2 pods (min)"]
-            A1["pod"]
-            A2["pod"]
-        end
-
-        subgraph S4["4 pods"]
-            B1["pod"]
-            B2["pod"]
-            B3["pod"]
-            B4["pod"]
-        end
-
-        subgraph S8["8 pods"]
-            C1["pod"]
-            C2["pod"]
-            C3["pod"]
-            C4["pod"]
-            C5["pod"]
-            C6["pod"]
-            C7["pod"]
-            C8["pod"]
-        end
-
-        subgraph SN["… up to 30 pods"]
-            D1["pod"]
-            D2["pod"]
-            D3["pod"]
-            D4["pod"]
-        end
-
-        S2 -->|scale up| S4
-        S4 -->|scale up| S8
-        S8 -->|scale up| SN
-    end
+    S2["2 pods (min)"] -->|scale up| S4["4 pods"]
+    S4 -->|scale up| S8["8 pods"]
+    S8 -->|scale up| SMAX["… up to 30 pods"]
 ```
 
 ### Constitutional HPA Rules (Unviolable)
