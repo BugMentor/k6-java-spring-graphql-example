@@ -40,8 +40,33 @@ graph TD
     HPA -->|monitors| Metrics
     Metrics -->|triggers| S2
 
-    S2["2 pods (min)"] -->|scale up| S4["4 pods"]
-    S4 -->|scale up| S8["8 pods"]
+    subgraph S2["2 pods (min)"]
+        P1["pod"]
+        P2["pod"]
+    end
+
+    S2 -->|scale up| S4
+
+    subgraph S4["4 pods"]
+        Q1["pod"]
+        Q2["pod"]
+        Q3["pod"]
+        Q4["pod"]
+    end
+
+    S4 -->|scale up| S8
+
+    subgraph S8["8 pods"]
+        R1["pod"]
+        R2["pod"]
+        R3["pod"]
+        R4["pod"]
+        R5["pod"]
+        R6["pod"]
+        R7["pod"]
+        R8["pod"]
+    end
+
     S8 -->|scale up| SMAX["… up to 30 pods"]
 ```
 
