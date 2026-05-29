@@ -73,7 +73,7 @@ public class PaymentPersistenceAdapter implements PaymentRepositoryPort {
     }
 
     private Specification<Payment> hasCustomerId(String customerId) {
-        return (root, query, cb) -> cb.equal(root.get("customerId"), customerId);
+        return (root, query, cb) -> cb.equal(root.join("user").get("id"), UUID.fromString(customerId));
     }
 
     private Specification<Payment> hasStatus(String status) {
