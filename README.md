@@ -320,7 +320,7 @@ Available at `http://localhost:3000` → **"Payment Service - Real-Time Monitori
 
 ## Kubernetes Deployment
 
-Deployed on **KinD (Kubernetes in Docker)** cluster `payment-fight` (3 nodes: 1 control-plane, 2 workers).
+Deployed on **KinD (Kubernetes in Docker)** cluster `payment-fight` (3 nodes: 1 control-plane, 2 workers) for local testing, plus **Floci** (EKS simulator) for production-grade EKS + NLB + HPA simulation.
 
 ### Cluster Topology
 
@@ -346,6 +346,52 @@ graph TD
     end
 ```
 
+### Floci Architecture (EKS Simulation)
+
+Floci replaces KinD for EKS-native testing — it runs a K3s cluster inside LocalStack, mocks AWS EKS + ELBv2 APIs, and provides a real NLB endpoint for k6 attacks.
+
+```mermaid
+graph TD
+    subgraph Host["Docker Host"]
+        FL["Floci Container<br/>floci/floci:latest<br/>📦 AWS API (4566)<br/>☸️ K3s (6443)<br/>📊 Metrics Server"]
+        REG["Registry:2<br/>port 5000"]
+
+        subgraph EKS["EKS Cluster (K3s)"]
+            subgraph ns["namespace: payments"]
+                ELB["NLB<br/>port 80 → 8080"]
+                HPA["HPA<br/>min:2 max:20<br/>CPU>80% RAM>60%"]
+                PG["PostgreSQL 16"]
+                SVC1["Java Spring pod 1<br/>1Gi/1CPU"]
+                SVC2["Java Spring pod 2<br/>1Gi/1CPU"]
+                SVCX["… up to 20 pods"]
+            end
+        end
+
+        K6["k6 Load Test"] -->|hits localhost| ELB
+        ELB --> SVC1 & SVC2
+        SVC1 --> PG
+        SVC2 --> PG
+        HPA -.->|scales| SVC1 & SVC2 & SVCX
+        FL -->|aws eks mock| ELB
+        REG -.->|image pull| SVC1
+    end
+
+    subgraph Env["Java-Specific Env Vars"]
+        J1["SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/payments"]
+        J2["JAVA_TOOL_OPTIONS=-XX:+UseZGC -XX:MaxRAMPercentage=50.0"]
+        J3["SERVER_TOMCAT_THREADS_MAX=200"]
+    end
+    SVC1 --> Env
+```
+
+**Setup commands:**
+```bash
+docker compose -f benchmark/floci/docker-compose.yaml up -d
+bash benchmark/floci/setup-eks.sh                     # creates EKS + deploys
+kubectl -n payments port-forward svc/payment-service 8081:80
+BASE_URL=http://localhost:8081 k6 run benchmark/k6/memory-stress-test.js
+```
+
 ### Deployment Manifests
 
 | File | Purpose |
@@ -369,7 +415,7 @@ graph TD
 | Observability | OpenTelemetry Collector, Prometheus (scraper), Mimir (metrics), Loki (logs), Tempo (traces), Grafana (dashboards) |
 | Testing | JUnit 5, Mockito, REST Assured |
 | Load Testing | k6 (up to 5,000 VUs tested) |
-| Container | Docker, KinD (Kubernetes in Docker) |
+| Container | Docker, KinD (Kubernetes in Docker), Floci (EKS simulator) |
 | Concurrency | Pessimistic locks (`@Lock(PESSIMISTIC_WRITE)`) for wallet mutations, Optimistic locks (`@Version`) for payment state transitions |
 | JVM | ZGC, String Deduplication, AlwaysPreTouch, MaxRAMPercentage=75% |
 

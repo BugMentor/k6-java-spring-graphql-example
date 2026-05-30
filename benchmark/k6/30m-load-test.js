@@ -1,5 +1,4 @@
 import { check, sleep, group } from 'k6';
-import http from 'k6/http';
 import { Rate, Trend, Counter } from 'k6/metrics';
 import {
   generateUUID,
@@ -15,13 +14,13 @@ const topUpLatency = new Trend('top_up_latency', true);
 const searchLatency = new Trend('search_latency', true);
 const concurrentConnections = new Counter('concurrent_vus');
 
-const BASE_URL = __ENV.BASE_URL || 'http://payment-service.payments.svc.cluster.local';
+const BASE_URL = __ENV.BASE_URL || 'http://localhost:8081';
 const GRAPHQL_URL = `${BASE_URL}/graphql`;
 const TARGET_VUS = parseInt(__ENV.TARGET_VUS) || 50;
-const TEST_DURATION = __ENV.TEST_DURATION || '5m';
+const TEST_DURATION = __ENV.TEST_DURATION || '30m';
 
 const WALLET_TRANSFER_MUTATION = `
-mutation($walletId: String!, $merchantId: String!, $amount: Float!) {
+mutation($walletId: ID!, $merchantId: ID!, $amount: Float!) {
   walletTransfer(walletId: $walletId, merchantId: $merchantId, amount: $amount) {
     id
     status
@@ -41,7 +40,7 @@ mutation($input: ProcessPaymentInput!) {
 }`;
 
 const TOP_UP_MUTATION = `
-mutation($walletId: String!, $amount: Float!) {
+mutation($walletId: ID!, $amount: Float!) {
   topUpWallet(walletId: $walletId, amount: $amount) {
     id
     balance
@@ -59,7 +58,7 @@ query($minAmount: Float, $maxAmount: Float, $status: String, $page: Int, $size: 
 }`;
 
 const USER_PAYMENTS_QUERY = `
-query($userId: String!, $status: String, $limit: Int) {
+query($userId: ID!, $status: String, $limit: Int) {
   payments(userId: $userId, status: $status, limit: $limit) {
     id
     amount
@@ -70,11 +69,11 @@ query($userId: String!, $status: String, $limit: Int) {
 
 export const options = {
   stages: [
-    { duration: '1m',  target: Math.floor(TARGET_VUS * 0.2) },
-    { duration: '2m',  target: Math.floor(TARGET_VUS * 0.5) },
-    { duration: '2m',  target: Math.floor(TARGET_VUS * 0.8) },
-    { duration: '3m',  target: TARGET_VUS },
+    { duration: '2m',  target: Math.floor(TARGET_VUS * 0.2) },
+    { duration: '3m',  target: Math.floor(TARGET_VUS * 0.5) },
+    { duration: '5m',  target: Math.floor(TARGET_VUS * 0.8) },
     { duration: '5m',  target: TARGET_VUS },
+    { duration: '13m', target: TARGET_VUS },
     { duration: '2m',  target: 0 },
   ],
   thresholds: {
@@ -266,8 +265,8 @@ export function teardown(data) {
 
 export function handleSummary(data) {
   return {
-    'benchmark/k6/results/summary.json': JSON.stringify(data, null, 2),
-    'benchmark/k6/results/summary.txt': textSummary(data),
+    'benchmark/k6/results/2026-05-29/java-graphql-30m-summary.json': JSON.stringify(data, null, 2),
+    'benchmark/k6/results/2026-05-29/java-graphql-30m-summary.txt': textSummary(data),
   };
 }
 

@@ -30,6 +30,15 @@ receivers:
                 app: payment-service
                 backend: java-graphql
 
+        - job_name: 'go-payment-service'
+          scrape_interval: 10s
+          metrics_path: '/metrics'
+          static_configs:
+            - targets: ['host.docker.internal:8080']
+              labels:
+                app: payment-service
+                backend: go-graphql
+
 processors:
   batch:
     timeout: 10s

@@ -52,7 +52,7 @@ export function setupTestEntities(baseUrl, prefix = 'loadtest') {
   const merchantId = merchantRes.json().data.createMerchant.id;
 
   const createWalletQuery = `
-    mutation($userId: String!, $balance: Float, $currency: String) {
+    mutation($userId: ID!, $balance: Float!, $currency: String!) {
       createWallet(userId: $userId, balance: $balance, currency: $currency) {
         id
       }
@@ -66,7 +66,7 @@ export function setupTestEntities(baseUrl, prefix = 'loadtest') {
   const walletId = walletRes.json().data.createWallet.id;
 
   const topUpQuery = `
-    mutation($walletId: String!, $amount: Float!) {
+    mutation($walletId: ID!, $amount: Float!) {
       topUpWallet(walletId: $walletId, amount: $amount) {
         id
         balance
@@ -86,12 +86,12 @@ export function teardownTestEntities(baseUrl, data) {
   if (!data) return;
 
   const deleteUserQuery = `
-    mutation($id: String!) {
+    mutation($id: ID!) {
       deleteUser(id: $id)
     }
   `;
   const deleteMerchantQuery = `
-    mutation($id: String!) {
+    mutation($id: ID!) {
       deleteMerchant(id: $id)
     }
   `;
